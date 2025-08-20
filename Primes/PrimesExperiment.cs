@@ -385,40 +385,34 @@ public class PrimesExperiment
     {
         List<BigInteger> fabonaccis = [BigInteger.One, BigInteger.One];
 
-        var sum = fabonaccis.Aggregate(BigInteger.Zero, (result, s) => result + s);
-        var last = sum;
+        var prime = fabonaccis.Aggregate(BigInteger.Zero, (result, s) => result + s);
+
+        yield return prime;
+
         while (true)
         {
-            //如果和为质数，返回它
-            if (CheckPrime(fabonaccis, sum))
-            {
-                yield return sum;
-            }
-        next:
-
-            //如果没有找到合数，则继续生成下一个斐波那契数
+            //生成下一个斐波那契数
             var next = fabonaccis[^1] + fabonaccis[^2];
             fabonaccis.Add(next);
-
-            var sums = new SortedDictionary<BigInteger, BigInteger[]>();
+            //预取下一个以便于判断范围
+            next = fabonaccis[^1] + fabonaccis[^2];
+            
+            var candidates = new HashSet<BigInteger>();
             for (int i = 2; i < fabonaccis.Count; i++)
             {
-                GenerateCombinations(fabonaccis, last + 1, (last << 1), i, 0, [], sums);
+                GenerateCombinations(fabonaccis, prime + 1, (prime << 1), i, 0, [], candidates);
             }
-
-            var following = fabonaccis[^1] + fabonaccis[^2];
-            foreach (var s in sums)
+            foreach (var candidate in candidates.Order())
             {
-                var key = s.Key;
-                if (key<=following && CheckPrime(fabonaccis, key))
+                if (candidate > next) break;
+                if (IsPrimeWith(fabonaccis, candidate))
                 {
-                    yield return last = key;
+                    yield return prime = candidate;
                 }
             }
-            goto next;
         }
 
-        bool CheckPrime(List<BigInteger> fabonaccis, BigInteger sum, int start = 2)
+        bool IsPrimeWith(List<BigInteger> fabonaccis, BigInteger sum, int start = 2)
         {
             if (sum <= 1) return false;
             if (sum == 2 || sum == 3) return true;
@@ -434,14 +428,14 @@ public class PrimesExperiment
             return true;
         }
 
-        void GenerateCombinations(List<BigInteger> numbers, BigInteger min, BigInteger max, int k, int start, List<BigInteger> current, SortedDictionary<BigInteger, BigInteger[]> combinations)
+        void GenerateCombinations(List<BigInteger> numbers, BigInteger min, BigInteger max, int k, int start, List<BigInteger> current, HashSet<BigInteger> combinations)
         {
             if (current.Count == k)
             {
                 var sum = current.Aggregate(BigInteger.Zero, (result, s) => result + s);
                 if (!sum.IsEven && sum >= min && sum < max)
                 {
-                    combinations[sum] = [.. current];
+                    combinations.Add(sum);
                 }
             }
             else
