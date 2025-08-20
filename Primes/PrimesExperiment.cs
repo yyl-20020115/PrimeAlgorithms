@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using System;
+using System.ComponentModel.DataAnnotations;
 using System.Numerics;
 
 namespace Primes;
@@ -368,14 +369,14 @@ public class PrimesExperiment
 
     static IEnumerable<BigInteger> NextFabonacci()
     {
-        var fabonaccis = new List<BigInteger>() { BigInteger.One, BigInteger.One };
-        yield return fabonaccis[0];
-        yield return fabonaccis[1];
+        var fibonaccis = new List<BigInteger>() { BigInteger.One, BigInteger.One };
+        yield return fibonaccis[0];
+        yield return fibonaccis[1];
 
         while (true)
         {
-            var next = fabonaccis[^1] + fabonaccis[^2];
-            fabonaccis.Add(next);
+            var next = fibonaccis[^1] + fibonaccis[^2];
+            fibonaccis.Add(next);
             yield return next;
         }
     }
@@ -383,72 +384,190 @@ public class PrimesExperiment
 
     static IEnumerable<BigInteger> NextPrime()
     {
-        List<BigInteger> fabonaccis = [BigInteger.One, BigInteger.One];
-
-        var prime = fabonaccis.Aggregate(BigInteger.Zero, (result, s) => result + s);
-
-        yield return prime;
-
+        List<BigInteger> fibonaccis = [BigInteger.One, BigInteger.One];
+        var last = fibonaccis.Aggregate(BigInteger.Zero, (result, f) => result + f);
+        yield return last;
         while (true)
         {
             //生成下一个斐波那契数
-            var next = fabonaccis[^1] + fabonaccis[^2];
-            fabonaccis.Add(next);
-            //预取下一个以便于判断范围
-            next = fabonaccis[^1] + fabonaccis[^2];
-            
-            var candidates = new HashSet<BigInteger>();
-            for (int i = 2; i < fabonaccis.Count; i++)
+            fibonaccis.Add(fibonaccis[^1] + fibonaccis[^2]);
+
+            yield return last = NextPrimeWith(fibonaccis, last);
+        }
+
+        BigInteger NextPrimeWith(List<BigInteger> fibonaccis, BigInteger last)
+        {
+            var max = last << 1;
+            var mask = FibonacciDecompose(last);
+            while (true)
             {
-                GenerateCombinations(fabonaccis, prime + 1, (prime << 1), i, 0, [], candidates);
-            }
-            foreach (var candidate in candidates.Order())
-            {
-                if (candidate > next) break;
-                if (IsPrimeWith(fabonaccis, candidate))
+                mask += 2;
+                var value = GetFibonacciValueMask(fibonaccis,mask);
+                if (value > max)
                 {
-                    yield return prime = candidate;
+                    throw new InvalidDataException($"Next prime exceeds max value: {max}");
+                }
+                else if (IsPrimeWithFibonaccis(fibonaccis, value))
+                {
+                    return value;
                 }
             }
         }
 
-        bool IsPrimeWith(List<BigInteger> fabonaccis, BigInteger sum, int start = 2)
+        BigInteger GetFibonacciValueMask(List<BigInteger> fibonaccis, BigInteger mask)
+        {
+            var result = BigInteger.Zero;
+            int i = 0;
+            while (mask > 0)
+            {
+                //末尾为1(不是偶数，而是奇数，说明使用了这个斐波那契数)
+                if (!mask.IsEven)
+                {
+                    result += fibonaccis[i];
+                }
+                mask >>= 1;
+                i++;
+            }
+
+            return result;
+        }
+        
+        void SetBit(byte[] bytes, int index, bool value)
+        {
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, bytes.Length * 8);
+            var byteIndex = (int)(index / 8);
+            var bitIndex = (int)(index % 8);
+            if (value)
+            {
+                bytes[byteIndex] |= (byte)(1 << bitIndex);
+            }
+            else
+            {
+                bytes[byteIndex] &= (byte)~(1 << bitIndex);
+            }
+        }
+
+        BigInteger FibonacciDecompose(BigInteger n)
+        {           
+            var n_copy = n;
+            var ranks = new List<BigInteger>();
+            var a = BigInteger.Zero;
+            var b = BigInteger.One;
+            var c = BigInteger.Zero;
+            var d = BigInteger.Zero;
+            ranks.Add(a);
+            ranks.Add(b);
+            while (c <= n_copy)
+            {
+                d = c;
+                ranks.Add(c = a + b);
+                a = b;
+                b = c;
+            }
+
+            var bytes = new byte[(ranks.Count + 7) / 8 + 1];
+            Array.Fill(bytes, (byte)0xFF);
+            bytes[^1] &= (byte)(0xff >> (8 - ranks.Count % 8));
+            //减去最后的余数，因为用不上，因为余数可以被
+            //已有的数列中的所有项目在单周期中处理。
+            //这主要是因为斐波那契数列是致密的。
+            //由于上限已经求出，且斐波那契数列是致密数列，
+            //所以最终一定可以由斐波那契数列为基，实现唯一表述
+            //正如算数基本定理（任何整数都有唯一分解形式），
+            //任何整数都有唯一斐波那契数列分解的形式
+            var i = ranks.Count - 1;
+            for (; i >= 0; i--)
+            {
+                if (!n_copy.IsZero && n_copy >= ranks[i])
+                {
+                    SetBit(bytes, i, true);
+                    n_copy -= ranks[i];
+                    if (n_copy.IsZero) break;
+                }
+            }
+            //return bits as mask
+            return new (bytes);
+        }
+
+
+        bool IsPrimeWithFibonaccis(List<BigInteger> fibonaccis, BigInteger sum, int start = 2)
         {
             if (sum <= 1) return false;
             if (sum == 2 || sum == 3) return true;
             if (sum.IsEven) return false;
-            foreach (var f in fabonaccis[start..])
+            foreach (var f in fibonaccis[start..])
             {
-                //如果余数为0，则肯定不是质数，返回false
-                var (Quotient, Remainder) = BigInteger.DivRem(sum, f);
-                if (Remainder == 0 && Quotient > 1)
+                if (sum == f) continue;
+                if (BigInteger.GreatestCommonDivisor(sum, f) > BigInteger.One)
                     return false;
             }
             //没有余数为0的，返回true说明是质数
             return true;
         }
 
-        void GenerateCombinations(List<BigInteger> numbers, BigInteger min, BigInteger max, int k, int start, List<BigInteger> current, HashSet<BigInteger> combinations)
+
+        void GenerateCombinations(List<BigInteger> _fibonaccis, BigInteger min, BigInteger max, int bits, int start, List<BigInteger> current, HashSet<BigInteger> combinations)
         {
-            if (current.Count == k)
+            if (_fibonaccis.Count <= 1) return;
+
+            var p = _fibonaccis.FindLastIndex(f => f <= max);
+            var fibonaccis = _fibonaccis[0..(p + 1)];
+
+            // 生成组合：每一个fabonacci数都可以被选中或不选中,占1位
+            var bytes = new byte[(fibonaccis.Count + 7) / 8 + 1];
+            Array.Fill(bytes, (byte)0xFF);
+            bytes[^1] &= (byte)(0xff >> (8 - fibonaccis.Count % 8));
+            var template = new BigInteger(bytes);
+            var index = template;
+
+            bytes[^1] = 0;
+
+            while (index > 2)
             {
-                var sum = current.Aggregate(BigInteger.Zero, (result, s) => result + s);
-                if (!sum.IsEven && sum >= min && sum < max)
+                if (CountOnesOptimized(index) == bits)
                 {
-                    combinations.Add(sum);
+                    var sum = BigInteger.Zero;
+                    for (int i = 0; i < fibonaccis.Count; i++)
+                    {
+                        if ((index & (BigInteger.One << i)) != 0)
+                        {
+                            sum += fibonaccis[i];
+                        }
+                    }
+                    if (!sum.IsEven && sum >= min && sum <= max)
+                    {
+                        combinations.Add(sum);
+                    }
                 }
+
+                index -= 2;
+            }
+        }
+        int CountOnesOptimized(BigInteger n)
+        {
+            if (n <= ulong.MaxValue)
+            {
+                var u = (ulong)n;
+
+                int count = 0;
+                while (u > 0)
+                {
+                    count++;
+                    u &= (u - 1); // 清除最低位的1
+                }
+                return count;
             }
             else
             {
-                for (int i = start; i < numbers.Count; i++)
+                int count = 0;
+                while (n > 0)
                 {
-                    current.Add(numbers[i]);
-                    GenerateCombinations(numbers, min, max, k, i + 1, current, combinations);
-                    current.RemoveAt(current.Count - 1);
+                    count++;
+                    n &= (n - 1); // 清除最低位的1
                 }
+                return count;
             }
         }
-
     }
     static int Main(string[] args)
     {
@@ -464,7 +583,12 @@ public class PrimesExperiment
         foreach (var p in NextPrime())
         {
             Console.WriteLine(p);
-            if (p > 100) break;
+            if (!IsPrime(p))
+            {
+                Console.WriteLine($"Error: {p} is not prime!");
+            }
+
+            if (p > 1000) break;
         }
 
         for (int i = 100000; i >= 2; i--)
@@ -498,7 +622,9 @@ public class PrimesExperiment
             var n = BigInteger.Parse(line);
 
             if (MillerRabin(n))
+            {
                 Console.WriteLine("Yes, it's prime!");
+            }
             else
             {
                 Console.WriteLine("No, not prime.");
