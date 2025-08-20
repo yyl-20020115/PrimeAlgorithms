@@ -1,5 +1,4 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using System.Diagnostics.Metrics;
 using System.Numerics;
 
 namespace Primes;
@@ -263,7 +262,13 @@ public class PrimesExperiment
         }
         return table;
     }
-
+    /// <summary>
+    /// 齐肯多夫定理（Zeckendorf's theorem）:
+    /// ‌任何正整数均可唯一表示为若干个互不相邻的斐波那契数（通常排除首个斐波那契数1）之和。
+    /// </summary>
+    /// <param name="n"></param>
+    /// <returns></returns>
+    /// <exception cref="InvalidDataException"></exception>
     static BigInteger[][] Fibonacci(BigInteger n)
     {
         var table = Array.Empty<BigInteger[]>();
@@ -325,7 +330,7 @@ public class PrimesExperiment
 
         list.Reverse();
         var counts = new List<(int count, BigInteger number)>();
-        var dict = new Dictionary<BigInteger, int>();
+        var set = new HashSet<BigInteger>();
         //p的下限为i
         for (var p = all.Length - 1; p >= i; p--)
         {
@@ -334,7 +339,7 @@ public class PrimesExperiment
             var rows = list.Where(t => t[^1] == key).ToArray().Length;
             counts.Add((rows, key));
             if (key > BigInteger.One && rows > 0)
-                dict[key] = rows;
+                set.Add(key);
         }
         counts.Reverse();
         var agg = counts.Aggregate(BigInteger.Zero, (result, s) => result + s.count * s.number);
@@ -360,8 +365,114 @@ public class PrimesExperiment
         }
         return table;
     }
+
+    static IEnumerable<BigInteger> NextFabonacci()
+    {
+        var fabonaccis = new List<BigInteger>() { BigInteger.One, BigInteger.One };
+        yield return fabonaccis[0];
+        yield return fabonaccis[1];
+
+        while (true)
+        {
+            var next = fabonaccis[^1] + fabonaccis[^2];
+            fabonaccis.Add(next);
+            yield return next;
+        }
+    }
+
+
+    static IEnumerable<BigInteger> NextPrime()
+    {
+        List<BigInteger> fabonaccis = [BigInteger.One, BigInteger.One];
+
+        var sum = fabonaccis.Aggregate(BigInteger.Zero, (result, s) => result + s);
+        var last = sum;
+        while (true)
+        {
+            //如果和为质数，返回它
+            if (CheckPrime(fabonaccis, sum))
+            {
+                yield return sum;
+            }
+        next:
+
+            //如果没有找到合数，则继续生成下一个斐波那契数
+            var next = fabonaccis[^1] + fabonaccis[^2];
+            fabonaccis.Add(next);
+
+            var sums = new SortedDictionary<BigInteger, BigInteger[]>();
+            for (int i = 2; i < fabonaccis.Count; i++)
+            {
+                GenerateCombinations(fabonaccis, last + 1, (last << 1), i, 0, [], sums);
+            }
+
+            var following = fabonaccis[^1] + fabonaccis[^2];
+            foreach (var s in sums)
+            {
+                var key = s.Key;
+                if (key<=following && CheckPrime(fabonaccis, key))
+                {
+                    yield return last = key;
+                }
+            }
+            goto next;
+        }
+
+        bool CheckPrime(List<BigInteger> fabonaccis, BigInteger sum, int start = 2)
+        {
+            if (sum <= 1) return false;
+            if (sum == 2 || sum == 3) return true;
+            if (sum.IsEven) return false;
+            foreach (var f in fabonaccis[start..])
+            {
+                //如果余数为0，则肯定不是质数，返回false
+                var (Quotient, Remainder) = BigInteger.DivRem(sum, f);
+                if (Remainder == 0 && Quotient > 1)
+                    return false;
+            }
+            //没有余数为0的，返回true说明是质数
+            return true;
+        }
+
+        void GenerateCombinations(List<BigInteger> numbers, BigInteger min, BigInteger max, int k, int start, List<BigInteger> current, SortedDictionary<BigInteger, BigInteger[]> combinations)
+        {
+            if (current.Count == k)
+            {
+                var sum = current.Aggregate(BigInteger.Zero, (result, s) => result + s);
+                if (!sum.IsEven && sum >= min && sum < max)
+                {
+                    combinations[sum] = [.. current];
+                }
+            }
+            else
+            {
+                for (int i = start; i < numbers.Count; i++)
+                {
+                    current.Add(numbers[i]);
+                    GenerateCombinations(numbers, min, max, k, i + 1, current, combinations);
+                    current.RemoveAt(current.Count - 1);
+                }
+            }
+        }
+
+    }
     static int Main(string[] args)
     {
+        if (false)
+        {
+            foreach (var f in NextFabonacci())
+            {
+                Console.WriteLine(f);
+                if (f > 100) break;
+            }
+        }
+
+        foreach (var p in NextPrime())
+        {
+            Console.WriteLine(p);
+            if (p > 100) break;
+        }
+
         for (int i = 100000; i >= 2; i--)
         {
             var b = GetRandomWith(2048);
