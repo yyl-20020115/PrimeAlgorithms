@@ -1,9 +1,6 @@
-﻿using System;
-using System.ComponentModel.DataAnnotations;
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace Primes;
-
 
 public class PrimesExperiment
 {
@@ -197,7 +194,7 @@ public class PrimesExperiment
         square_ranks.Add(a);
         square_ranks.Add(b);
         var cc = BigInteger.Zero;
-        while (cc < n_copy)
+        while (cc <= n_copy)
         {
             d = cc;
             c = a + b;
@@ -290,7 +287,7 @@ public class PrimesExperiment
         var d = BigInteger.Zero;
         ranks.Add(a);
         ranks.Add(b);
-        while (c < n_copy)
+        while (c <= n_copy)
         {
             d = c;
             ranks.Add(c = a + b);
@@ -367,9 +364,9 @@ public class PrimesExperiment
         return table;
     }
 
-    static IEnumerable<BigInteger> NextFabonacci()
+    static IEnumerable<BigInteger> NextFibonacci()
     {
-        var fibonaccis = new List<BigInteger>() { BigInteger.One, BigInteger.One };
+        List<BigInteger> fibonaccis = [BigInteger.One, BigInteger.One];
         yield return fibonaccis[0];
         yield return fibonaccis[1];
 
@@ -385,8 +382,10 @@ public class PrimesExperiment
     static IEnumerable<BigInteger> NextPrime()
     {
         List<BigInteger> fibonaccis = [BigInteger.One, BigInteger.One];
-        var last = fibonaccis.Aggregate(BigInteger.Zero, (result, f) => result + f);
-        yield return last;
+
+        yield return fibonaccis.Aggregate(
+            BigInteger.Zero, (result, f) => result + f)
+            is BigInteger last ? last : BigInteger.Zero;
         while (true)
         {
             //生成下一个斐波那契数
@@ -402,7 +401,7 @@ public class PrimesExperiment
             while (true)
             {
                 mask += 2;
-                var value = GetFibonacciValueMask(fibonaccis,mask);
+                var value = GetFibonacciValueMask(fibonaccis, mask);
                 if (value > max)
                 {
                     throw new InvalidDataException($"Next prime exceeds max value: {max}");
@@ -431,7 +430,7 @@ public class PrimesExperiment
 
             return result;
         }
-        
+
         void SetBit(byte[] bytes, int index, bool value)
         {
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, bytes.Length * 8);
@@ -448,7 +447,7 @@ public class PrimesExperiment
         }
 
         BigInteger FibonacciDecompose(BigInteger n)
-        {           
+        {
             var n_copy = n;
             var ranks = new List<BigInteger>();
             var a = BigInteger.Zero;
@@ -486,7 +485,7 @@ public class PrimesExperiment
                 }
             }
             //return bits as mask
-            return new (bytes);
+            return new(bytes);
         }
 
 
@@ -569,33 +568,205 @@ public class PrimesExperiment
             }
         }
     }
+
+
+    static (BigInteger[], int[], List<BigInteger>) FibonacciDecompose(BigInteger n, List<BigInteger> fibonaccis, int pow = 1, List<BigInteger>? fibonaccis_pows = null)
+    {
+        var n_copy = n;
+        var a = BigInteger.Zero;
+        var b = BigInteger.One;
+        var c = BigInteger.Zero;
+        if ((fibonaccis ??= []).Count == 0)
+        {
+            fibonaccis.Add(a);
+            fibonaccis.Add(b);
+            while (c <= n_copy)
+            {
+                fibonaccis.Add(c = a + b);
+                a = b;
+                b = c;
+            }
+        }
+        if (fibonaccis_pows != null)
+        {
+            foreach (var fibonacci in fibonaccis)
+            {
+                var fib = fibonacci;
+                if (pow > 1)
+                {
+                    fib = BigInteger.Pow(fib, pow);
+                }
+                fibonaccis_pows.Add(fib);
+            }
+        }
+        var result = new BigInteger[fibonaccis.Count];
+        var counts = new int[fibonaccis.Count];
+        //这主要是因为斐波那契数列是致密的。
+        //由于上限已经求出，且斐波那契数列是致密数列，
+        //所以最终一定可以由斐波那契数列为基，实现唯一表述
+        //正如算数基本定理（任何整数都有唯一分解形式），
+        //任何整数都有唯一斐波那契数列分解的形式
+        var i = fibonaccis.Count - 1;
+        while (!n_copy.IsZero)
+        {
+            BigInteger fibonacci_pow;
+            if (fibonaccis_pows != null)
+            {
+                fibonacci_pow = fibonaccis_pows[i];
+            }
+            else
+            {
+                fibonacci_pow = fibonaccis[i];
+                if (pow > 1)
+                {
+                    fibonacci_pow = BigInteger.Pow(fibonacci_pow, pow);
+                }
+            }
+            if (!n_copy.IsZero && n_copy >= fibonacci_pow)
+            {
+                result[i] += fibonacci_pow;
+                counts[i]++;
+                n_copy -= fibonacci_pow;
+                if (n_copy.IsZero) break;
+            }
+            i--;
+            if (i == 0) i = fibonaccis.Count - 1;
+        }
+        var sum = result.Aggregate(BigInteger.Zero, (result, f) => result + f);
+        if (sum != n)
+        {
+            throw new InvalidDataException($"Fibonacci decomposition failed: expected {n}, got {sum}");
+        }
+        return (result[1..], counts[1..], fibonaccis_pows?[1..] ?? []);
+    }
+    static List<(BigInteger[] ns, int[] counts, List<BigInteger> pows)>
+        FibonacciDecomposeAll(BigInteger n, List<BigInteger> fibonaccis)
+    {
+        var i = 0;
+        //先用1阶求出总阶数
+        List<(BigInteger[] ns, int[] counts, List<BigInteger> pows)> list = [];
+        do
+        {
+            list.Add(FibonacciDecompose(n, fibonaccis, (1 + i++), []));
+
+        } while (list[^1].ns.Length >= 3 && list[^1].ns[3..].Any(r => !r.IsZero));
+
+        i--;
+        if (i >= 0)
+        {
+            //用总阶数创建n阶斐波那契数列
+            var nfs = NextNFibonacci(i, (i >> 1)).ToList();
+            //用n阶斐波那契数列分解原数
+
+            list.Clear();
+            for (int j = 0; j < (i >> 1); j++)
+            {
+                list.Add(FibonacciDecompose(n, nfs, j + 1, []));
+            }
+            //试着分解中间值
+            //幂次的中间值，意味着虚数单位
+        }
+
+        return list;
+    }
+    static IEnumerable<BigInteger> NextNFibonacci(int n)
+    {
+        if (n <= 0) yield break;
+        var fibonaccis = new List<BigInteger>();
+        for (var i = 0; i < n; i++)
+        {
+            fibonaccis.Add(BigInteger.One);
+            yield return fibonaccis[^1];
+        }
+        while (true)
+        {
+            var next = BigInteger.Zero;
+            for (int i = 1; i <= n; i++)
+            {
+                next += fibonaccis[^i];
+            }
+            fibonaccis.Add(next);
+            yield return next;
+        }
+    }
+    /// <summary>
+    /// 列举N阶斐波那契数列
+    /// </summary>
+    /// <param name="n"><n阶/param>
+    /// <param name="extlength"><扩展的长度，如果为负数则取全部已有长度，此时为n*2^extlength/param>
+    /// <returns></returns>
+    static IEnumerable<BigInteger> NextNFibonacci(int n, int extlength)
+    {
+        if (n <= 0) yield break;
+        var fibonaccis = new List<BigInteger>();
+        for (var i = 0; i < n; i++)
+        {
+            fibonaccis.Add(BigInteger.One);
+            yield return fibonaccis[^1];
+        }
+        if (extlength < 0)
+        {
+            extlength = -extlength;
+            for (int j = 0; j < extlength; j++)
+            {
+                var next = fibonaccis.Aggregate(
+                    BigInteger.Zero, (result, f) => result + f);
+                fibonaccis.Add(next);
+                yield return next;
+            }
+        }
+        else
+        {
+            for (int j = 0; j < extlength; j++)
+            {
+                var next = BigInteger.Zero;
+                for (int i = 1; i <= n; i++)
+                {
+                    next += fibonaccis[^i];
+                }
+                fibonaccis.Add(next);
+                yield return next;
+            }
+        }
+    }
+
     static int Main(string[] args)
     {
         if (false)
         {
-            foreach (var f in NextFabonacci())
+
+            foreach (var f in NextNFibonacci(4))
+            {
+                Console.WriteLine(f);
+                if (f > 100) break;
+            }
+
+            foreach (var f in NextFibonacci())
             {
                 Console.WriteLine(f);
                 if (f > 100) break;
             }
         }
-
-        foreach (var p in NextPrime())
+        if (false)
         {
-            Console.WriteLine(p);
-            if (!IsPrime(p))
+            foreach (var p in NextPrime())
             {
-                Console.WriteLine($"Error: {p} is not prime!");
+                Console.WriteLine(p);
+                if (!IsPrime(p))
+                {
+                    Console.WriteLine($"Error: {p} is not prime!");
+                }
+
+                if (p > 1000) break;
             }
-
-            if (p > 1000) break;
         }
-
-        for (int i = 100000; i >= 2; i--)
+        for (int i = 100001 ; i >= 2; i--)
         {
-            var b = GetRandomWith(2048);
-            b = new BigInteger(i);
-            var c = Fibonacci(b);
+            //var b = GetRandomWith(2048);
+            var b = new BigInteger(i);
+            //var c = Fibonacci(b);
+            var fibs = new List<BigInteger>();
+            var result = FibonacciDecomposeAll(b, fibs);
 
         }
 
