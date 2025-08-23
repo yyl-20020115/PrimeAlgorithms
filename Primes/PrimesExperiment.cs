@@ -372,9 +372,8 @@ public class PrimesExperiment
 
         while (true)
         {
-            var next = fibonaccis[^1] + fibonaccis[^2];
-            fibonaccis.Add(next);
-            yield return next;
+            fibonaccis.Add(fibonaccis[^1] + fibonaccis[^2]);
+            yield return fibonaccis[^1];
         }
     }
 
@@ -648,7 +647,6 @@ public class PrimesExperiment
         do
         {
             list.Add(FibonacciDecompose(n, fibonaccis, (1 + i++), []));
-
         } while (list[^1].ns.Length >= 3 && list[^1].ns[3..].Any(r => !r.IsZero));
 
         i--;
